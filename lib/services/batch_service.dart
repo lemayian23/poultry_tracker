@@ -7,6 +7,50 @@ class BatchService {
   static const String batchesBox = 'batches';
   static const String recordsBox = 'records';
   static const String vaccinationsBox = 'vaccinations';
+  static double feedPricePerKg = 50.0;
+
+  Future<double> getTotalFeedCost(String batchId) async {
+    final totalFeed = await getTotalFeed(batchId);
+    return totalFeed * feedPricePerKg;
+  }
+
+  Future<double> getFarmTotalFeedCost() async {
+    final batches = await getActiveBatches();
+    double totalCost = 0;
+    for (final batch in batches) {
+      final batchCost = await getTotalFeedCost(batch.id);
+      totalCost = totalCost + batchCost;
+    }
+    return totalCost;
+  }
+
+  Future<int> getEggsThisWeek(String batchId) async {
+    final records = await getRecordsForBatch(batchId);
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+
+    int total = 0;
+    for (final record in records) {
+      if (record.date.isAfter(startOfWeek)) {
+        total = total + record.eggsCollected;
+      }
+    }
+    return total;
+  }
+
+  Future<int> getEggsThisMonth(String batchId) async {
+    final records = await getRecordsForBatch(batchId);
+    final now = DateTime.now();
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    
+    int total = 0;
+    for (final record in records) {
+      if (record.date.isAfter(startOfMonth)) {
+        total = total + record.eggsCollected;
+      }
+    }
+    return total;
+  }
 
   // Initialize Hive boxes - PUBLIC METHODS
   Future<Box<Batch>> openBatchesBox() async {
@@ -106,7 +150,7 @@ class BatchService {
     final records = await getRecordsForBatch(batchId);
     int total = 0;
     for (final record in records) {
-      total += record.mortality;
+      total = total + record.mortality;
     }
     return total;
   }
@@ -116,7 +160,7 @@ class BatchService {
     final records = await getRecordsForBatch(batchId);
     int total = 0;
     for (final record in records) {
-      total += record.eggsCollected;
+      total = total + record.eggsCollected;
     }
     return total;
   }
@@ -126,7 +170,7 @@ class BatchService {
     final records = await getRecordsForBatch(batchId);
     double total = 0;
     for (final record in records) {
-      total += record.feedConsumed;
+      total = total + record.feedConsumed;
     }
     return total;
   }
@@ -213,10 +257,10 @@ class BatchService {
       final batchEggs = await getTotalEggs(batch.id);
       final batchFeed = await getTotalFeed(batch.id);
       
-      totalBirds += batch.getCurrentBirds(batchMortality);
-      totalMortality += batchMortality;
-      totalEggs += batchEggs;
-      totalFeed += batchFeed;
+      totalBirds = totalBirds + batch.getCurrentBirds(batchMortality);
+      totalMortality = totalMortality + batchMortality;
+      totalEggs = totalEggs + batchEggs;
+      totalFeed = totalFeed + batchFeed;
     }
 
     return {

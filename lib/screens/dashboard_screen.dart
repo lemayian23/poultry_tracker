@@ -4,7 +4,7 @@ import '../services/export_service.dart';
 import '../models/batch.dart';
 import 'batch_list_screen.dart';
 import 'batch_detail_screen.dart';
-import 'subscription_plans_screen.dart'; // ADD THIS IMPORT
+import 'subscription_plans_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,6 +23,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+  }
+
+  Future<Map<String, dynamic>> _getEnhancedMetrics() async {
+    final totalBirds = await _getTotalBirdsAlive();
+    final mortalityRate = await _getMortalityRate();
+    final totalFeedCost = await _batchService.getFarmTotalFeedCost();
+    
+    int weeklyEggs = 0;
+    for (final batch in _batches.where((batch) => batch.type == 'layer')) {
+      weeklyEggs += await _batchService.getEggsThisWeek(batch.id);
+    }
+
+    return {
+      'totalBirds': totalBirds,
+      'mortalityRate': mortalityRate,
+      'totalFeedCost': totalFeedCost,
+      'weeklyEggs': weeklyEggs,
+    };
+  }
+
+  Future<double> _getMortalityRate() async { // REMOVED Batch parameter
+    int totalInitialBirds = 0; // FIXED: Changed 'totaInitialBirds' to 'totalInitialBirds'
+    int totalMortality = 0;
+
+    for (final batch in _batches) {
+      totalInitialBirds += batch.initialBirds; // FIXED: Changed 'b' to 'batch'
+      final mortality = await _batchService.getTotalMortality(batch.id);
+      totalMortality += mortality;
+    }
+    if (totalInitialBirds == 0) return 0.0;
+    return (totalMortality / totalInitialBirds) * 100;
   }
 
   Future<void> _loadDashboardData() async {
@@ -81,7 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _navigateToSubscription(context); // FIXED: Use the new method
+              _navigateToSubscription(context);
             },
             child: const Text('View Plans'),
           ),
@@ -165,8 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int _calculateTotalEggs() {
-    // Simple calculation - you can enhance this later
-    return _batches.length * 50; // Placeholder calculation
+    return _batches.length * 50;
   }
 
   @override
@@ -217,7 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _exportData(context);
                   break;
                 case 'upgrade':
-                  _navigateToSubscription(context); // FIXED: Direct navigation
+                  _navigateToSubscription(context);
                   break;
                 case 'about':
                   _showAboutDialog(context);
@@ -288,7 +318,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             child: const Text('Add First Batch'),
           ),
-          // ADD SUBSCRIPTION CARD TO EMPTY STATE TOO
           const SizedBox(height: 20),
           _buildSubscriptionCard(),
         ],
@@ -302,7 +331,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Welcome Section
           Card(
             elevation: 2,
             child: Padding(
@@ -347,13 +375,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           const SizedBox(height: 16),
-
-          // ADD SUBSCRIPTION CARD HERE
           _buildSubscriptionCard(),
-
           const SizedBox(height: 20),
 
-          // Key Metrics
           const Text(
             'Key Metrics',
             style: TextStyle(
@@ -363,14 +387,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 16),
 
-          FutureBuilder<int>(
-            future: _getTotalBirdsAlive(),
+          FutureBuilder<Map<String, dynamic>>(
+            future: _getEnhancedMetrics(),
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final totalBirds = snapshot.data ?? 0;
+              final metrics = snapshot.data ?? {};
+              final totalBirds = metrics['totalBirds'] ?? 0;
+              final mortalityRate = metrics['mortalityRate'] ?? 0.0;
+              final totalFeedCost = metrics['totalFeedCost'] ?? 0.0;
+              final weeklyEggs = metrics['weeklyEggs'] ?? 0; // FIXED: Changed 'weeklEggs' to 'weeklyEggs'
 
               return Column(
                 children: [
@@ -388,11 +416,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildMetricCard(
-                          title: 'Active Batches',
-                          value: _batches.length.toString(),
-                          subtitle: 'Total',
-                          icon: Icons.agriculture,
-                          color: Colors.blue,
+                          title: 'Mortality Rate',
+                          value: '${mortalityRate.toStringAsFixed(1)}%',
+                          subtitle: 'Overall',
+                          icon: Icons.warning,
+                          color: Colors.red,
                         ),
                       ),
                     ],
@@ -402,9 +430,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Expanded(
                         child: _buildMetricCard(
-                          title: 'Total Eggs',
-                          value: _calculateTotalEggs().toString(),
-                          subtitle: 'Estimated',
+                          title: 'Weekly Eggs',
+                          value: weeklyEggs.toString(), // FIXED: Removed toStringAsFixed()
+                          subtitle: 'This Week',
                           icon: Icons.egg,
                           color: Colors.amber,
                         ),
@@ -412,11 +440,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildMetricCard(
-                          title: 'Farm Status',
-                          value: 'Active',
-                          subtitle: 'All Systems Go',
-                          icon: Icons.check_circle,
-                          color: Colors.green,
+                          title: 'Feed Costs',
+                          value: 'KSH ${totalFeedCost.toStringAsFixed(0)}',
+                          subtitle: 'Total',
+                          icon: Icons.attach_money,
+                          color: Colors.blue,
                         ),
                       ),
                     ],
@@ -424,11 +452,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               );
             },
-          ),
+          ), // FIXED: Removed extra '>' and added missing comma
 
           const SizedBox(height: 24),
 
-          // Active Batches
           const Text(
             'Active Batches',
             style: TextStyle(
@@ -480,7 +507,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ADD THIS NEW METHOD FOR SUBSCRIPTION CARD
   Widget _buildSubscriptionCard() {
     return Card(
       elevation: 3,
